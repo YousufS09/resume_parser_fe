@@ -4,7 +4,9 @@ import DashboardLayout from './components/templates/DashboardLayout';
 import Dashboard from './pages/Dashboard';
 import UploadResume from './pages/UploadResume';
 import ParsedResults from './pages/ParsedResults';
+import ViewProfile from './pages/ViewProfile';
 import './App.css';
+import './pages/Dashboard/Dashboard.css';
 
 function App() {
   return (
@@ -15,6 +17,7 @@ function App() {
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="upload" element={<UploadResume />} />
           <Route path="results" element={<ParsedResults />} />
+          <Route path="results/:id" element={<ViewProfile />} />
         </Route>
       </Routes>
     </Router>

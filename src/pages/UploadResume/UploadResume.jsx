@@ -1,9 +1,28 @@
 import React, { useState } from 'react';
+import { resumeApi, extractErrorMessage } from '../../services/resumeApi';
 import './UploadResume.css';
 
 const UploadResume = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [files, setFiles] = useState([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [notice, setNotice] = useState(null);
+  const [recentResult, setRecentResult] = useState(null);
+
+  const addFiles = (incomingFiles) => {
+    const normalized = incomingFiles.map((file) => ({
+      clientId: `${Date.now()}-${Math.round(Math.random() * 1e9)}`,
+      file,
+      status: 'ready',
+      uploadedResume: null,
+      parsedResume: null,
+      parsedData: null,
+      error: null,
+    }));
+
+    setFiles((prev) => [...prev, ...normalized]);
+    setNotice({ type: 'info', text: `${normalized.length} file${normalized.length === 1 ? '' : 's'} added.` });
+  };
 
   const handleDragOver = (e) => {
     e.preventDefault();
@@ -19,16 +38,131 @@ const UploadResume = () => {
     e.preventDefault();
     setIsDragging(false);
     const droppedFiles = Array.from(e.dataTransfer.files);
-    setFiles((prev) => [...prev, ...droppedFiles]);
+    addFiles(droppedFiles);
   };
 
   const handleFileSelect = (e) => {
     const selectedFiles = Array.from(e.target.files);
-    setFiles((prev) => [...prev, ...selectedFiles]);
+    addFiles(selectedFiles);
+    e.target.value = '';
   };
 
-  const removeFile = (index) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
+  const updateFile = (clientId, updates) => {
+    setFiles((prev) =>
+      prev.map((item) => (item.clientId === clientId ? { ...item, ...updates } : item))
+    );
+  };
+
+  const removeFile = (clientId) => {
+    setFiles((prev) => prev.filter((item) => item.clientId !== clientId));
+  };
+
+  const clearCompleted = () => {
+    setFiles((prev) => prev.filter((item) => item.status === 'ready' || item.status === 'uploading' || item.status === 'parsing'));
+  };
+
+  const processFile = async (item, action) => {
+    if (action === 'parse-uploaded' && !item.uploadedResume?.id) {
+      throw new Error('Upload the resume first before parsing it.');
+    }
+
+    updateFile(item.clientId, {
+      status: action === 'upload' ? 'uploading' : 'parsing',
+      error: null,
+    });
+
+    let response;
+
+    if (action === 'upload') {
+      response = await resumeApi.uploadResume(item.file);
+      updateFile(item.clientId, {
+        status: 'uploaded',
+        uploadedResume: response.data,
+      });
+      return response.data;
+    }
+
+    if (action === 'parse') {
+      response = await resumeApi.parseResume(item.file);
+      updateFile(item.clientId, {
+        status: 'parsed',
+        parsedResume: response.resume,
+        parsedData: response.data,
+      });
+      return response.resume || response.data;
+    }
+
+    response = await resumeApi.parseUploadedResume(item.uploadedResume.id);
+    updateFile(item.clientId, {
+      status: 'parsed',
+      parsedResume: response.data,
+      parsedData: response.data?.data || null,
+    });
+    return response.data;
+  };
+
+  const processBatch = async (action) => {
+    const targetItems = files.filter((item) => {
+      if (action === 'upload') {
+        return item.status === 'ready';
+      }
+
+      if (action === 'parse') {
+        return item.status === 'ready';
+      }
+
+      return item.status === 'uploaded' && item.uploadedResume?.id;
+    });
+
+    if (targetItems.length === 0) {
+      setNotice({ type: 'warning', text: 'No matching files are available for that action.' });
+      return;
+    }
+
+    setIsProcessing(true);
+    setNotice(null);
+
+    try {
+      for (const item of targetItems) {
+        const result = await processFile(item, action);
+        setRecentResult(result);
+      }
+
+      const actionLabel =
+        action === 'upload' ? 'uploaded' : action === 'parse' ? 'parsed and saved' : 'parsed from the uploaded record';
+
+      setNotice({
+        type: 'success',
+        text: `${targetItems.length} resume${targetItems.length === 1 ? '' : 's'} ${actionLabel} successfully.`,
+      });
+    } catch (error) {
+      setNotice({ type: 'error', text: extractErrorMessage(error) });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const readyCount = files.filter((item) => item.status === 'ready').length;
+  const uploadedCount = files.filter((item) => item.status === 'uploaded').length;
+  const parsedCount = files.filter((item) => item.status === 'parsed').length;
+
+  const renderStatus = (status) => {
+    switch (status) {
+      case 'ready':
+        return 'Ready';
+      case 'uploading':
+        return 'Uploading';
+      case 'uploaded':
+        return 'Uploaded';
+      case 'parsing':
+        return 'Parsing';
+      case 'parsed':
+        return 'Parsed';
+      case 'error':
+        return 'Failed';
+      default:
+        return 'Queued';
+    }
   };
 
   return (
@@ -36,7 +170,14 @@ const UploadResume = () => {
       <div className="page-header">
         <div>
           <h1 className="page-title">Upload Resumes</h1>
-          <p className="page-subtitle">Drag and drop resume files to parse and extract candidate data.</p>
+          <p className="page-subtitle">
+            Upload first, parse later, or do both in one request. The page talks directly to the parser service.
+          </p>
+        </div>
+        <div className="upload-stats">
+          <span className="stat-chip">Ready: {readyCount}</span>
+          <span className="stat-chip">Uploaded: {uploadedCount}</span>
+          <span className="stat-chip">Parsed: {parsedCount}</span>
         </div>
       </div>
 
@@ -65,39 +206,148 @@ const UploadResume = () => {
             Browse Files
           </label>
         </div>
+
+        <div className="upload-toolbar">
+          <button
+            className="secondary-button"
+            onClick={() => processBatch('upload')}
+            disabled={isProcessing || readyCount === 0}
+          >
+            Upload Selected
+          </button>
+          <button
+            className="primary-button"
+            onClick={() => processBatch('parse')}
+            disabled={isProcessing || readyCount === 0}
+          >
+            Parse & Save
+          </button>
+          <button
+            className="text-button"
+            onClick={clearCompleted}
+            disabled={isProcessing}
+          >
+            Clear finished items
+          </button>
+        </div>
       </div>
+
+      {notice && (
+        <div className={`notice notice-${notice.type}`}>
+          {notice.text}
+        </div>
+      )}
 
       {files.length > 0 && (
         <div className="file-list-container card">
           <div className="card-header">
             <h2>Selected Files ({files.length})</h2>
-            <button className="text-button" onClick={() => setFiles([])}>Clear All</button>
+            <button className="text-button" onClick={() => setFiles([])} disabled={isProcessing}>
+              Clear All
+            </button>
           </div>
           <div className="card-body">
             <ul className="upload-file-list">
-              {files.map((file, index) => (
-                <li key={index} className="file-item">
+              {files.map((item) => (
+                <li key={item.clientId} className="file-item">
                   <div className="file-info">
                     <div className="file-type-icon">
                       <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                     </div>
                     <div>
-                      <div className="file-name">{file.name}</div>
-                      <div className="file-size">{(file.size / 1024 / 1024).toFixed(2)} MB</div>
+                      <div className="file-name">{item.file.name}</div>
+                      <div className="file-size">{(item.file.size / 1024 / 1024).toFixed(2)} MB</div>
+                      <div className="file-meta">
+                        <span className={`status-pill status-${item.status}`}>{renderStatus(item.status)}</span>
+                        {item.uploadedResume?.id && <span className="meta-text">ID: {item.uploadedResume.id}</span>}
+                      </div>
                     </div>
                   </div>
-                  <button className="icon-button delete" onClick={() => removeFile(index)}>
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                  </button>
+                  <div className="file-actions">
+                    {item.status === 'ready' && (
+                      <>
+                        <button
+                          className="secondary-button small-button"
+                          onClick={() => processFile(item, 'upload').catch((error) => {
+                            updateFile(item.clientId, { status: 'error', error: extractErrorMessage(error) });
+                            setNotice({ type: 'error', text: extractErrorMessage(error) });
+                          })}
+                          disabled={isProcessing}
+                        >
+                          Upload
+                        </button>
+                        <button
+                          className="primary-button small-button"
+                          onClick={() => processFile(item, 'parse').catch((error) => {
+                            updateFile(item.clientId, { status: 'error', error: extractErrorMessage(error) });
+                            setNotice({ type: 'error', text: extractErrorMessage(error) });
+                          })}
+                          disabled={isProcessing}
+                        >
+                          Parse
+                        </button>
+                      </>
+                    )}
+
+                    {item.status === 'uploaded' && item.uploadedResume?.id && (
+                      <button
+                        className="primary-button small-button"
+                        onClick={() => processFile(item, 'parse-uploaded').catch((error) => {
+                          updateFile(item.clientId, { status: 'error', error: extractErrorMessage(error) });
+                          setNotice({ type: 'error', text: extractErrorMessage(error) });
+                        })}
+                        disabled={isProcessing}
+                      >
+                        Parse Uploaded
+                      </button>
+                    )}
+
+                    <button className="icon-button delete" onClick={() => removeFile(item.clientId)} disabled={isProcessing}>
+                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a1 1 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                  </div>
+                  {item.error && <div className="item-error">{item.error}</div>}
                 </li>
               ))}
             </ul>
           </div>
-          <div className="card-footer align-right">
-            <button className="primary-button large-btn">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18" style={{marginRight: '8px'}}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
-              Parse {files.length} {files.length === 1 ? 'Resume' : 'Resumes'}
+          <div className="card-footer upload-footer">
+            <div className="footer-note">
+              {isProcessing ? 'Processing resumes against the parser service...' : 'Choose upload only or parse immediately depending on your workflow.'}
+            </div>
+            <button className="text-button" onClick={() => setRecentResult(null)} disabled={!recentResult}>
+              Clear latest response
             </button>
+          </div>
+        </div>
+      )}
+
+      {recentResult && (
+        <div className="card result-preview">
+          <div className="card-header">
+            <h2>Latest Service Response</h2>
+          </div>
+          <div className="card-body">
+            <div className="result-grid">
+              <div>
+                <div className="result-label">Name</div>
+                <div className="result-value">{recentResult.personalInfo?.name || recentResult.data?.personalInfo?.name || 'Not provided'}</div>
+              </div>
+              <div>
+                <div className="result-label">Email</div>
+                <div className="result-value">{recentResult.personalInfo?.email || recentResult.data?.personalInfo?.email || 'Not provided'}</div>
+              </div>
+              <div>
+                <div className="result-label">Phone</div>
+                <div className="result-value">{recentResult.personalInfo?.phone || recentResult.data?.personalInfo?.phone || 'Not provided'}</div>
+              </div>
+              <div>
+                <div className="result-label">Skills</div>
+                <div className="result-value">
+                  {(recentResult.skills || recentResult.data?.skills || []).length} extracted
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
