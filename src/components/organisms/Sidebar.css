@@ -57,10 +57,6 @@
   text-transform: uppercase;
 }
 
-.sidebar-collapse {
-  margin-left: auto;
-}
-
 .sidebar-nav {
   flex: 1;
   padding: 0.85rem 0.7rem;
@@ -157,10 +153,6 @@
   justify-content: center;
 }
 
-.sidebar.collapsed .sidebar-collapse {
-  margin-left: 0;
-}
-
 .sidebar.collapsed .sidebar-footer {
   display: none;
 }
@@ -188,7 +180,4 @@
     justify-content: center;
   }
 
-  .sidebar-collapse {
-    display: none;
-  }
 }

@@ -2,7 +2,7 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import './Sidebar.css';
 
-const Sidebar = ({ collapsed, onToggleCollapse }) => {
+const Sidebar = ({ collapsed }) => {
   return (
     <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-brand">
@@ -13,17 +13,6 @@ const Sidebar = ({ collapsed, onToggleCollapse }) => {
           <h2>ResumeAI</h2>
           <span>Parsing operations</span>
         </div>
-        <button
-          className="icon-button sidebar-collapse"
-          type="button"
-          onClick={onToggleCollapse}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 7h16M4 12h10M4 17h16" />
-          </svg>
-        </button>
       </div>
 
       <nav className="sidebar-nav" aria-label="Primary">

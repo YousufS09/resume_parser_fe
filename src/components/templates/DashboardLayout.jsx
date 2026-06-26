@@ -26,7 +26,6 @@ const DashboardLayout = () => {
     <div className={`dashboard-layout ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       <Sidebar
         collapsed={sidebarCollapsed}
-        onToggleCollapse={() => setSidebarCollapsed((current) => !current)}
       />
       <div className="dashboard-main">
         <Header
