@@ -4,11 +4,11 @@
 
 .profile-shell {
   display: grid;
-  gap: 1.25rem;
+  gap: 1rem;
 }
 
 .profile-hero {
-  padding: 1.5rem;
+  padding: 1.15rem;
 }
 
 .profile-hero-top {
@@ -16,7 +16,7 @@
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
-  margin-bottom: 1.25rem;
+  margin-bottom: 1rem;
 }
 
 .back-button {
@@ -38,19 +38,19 @@
   display: flex;
   align-items: center;
   gap: 1rem;
-  margin-bottom: 1.25rem;
+  margin-bottom: 1rem;
 }
 
 .profile-avatar {
-  width: 72px;
-  height: 72px;
+  width: 62px;
+  height: 62px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, var(--color-primary), #7c3aed);
   color: white;
-  font-size: 1.4rem;
+  font-size: 1.15rem;
   font-weight: 700;
   box-shadow: var(--shadow-md);
 }
@@ -63,7 +63,7 @@
 .profile-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
+  gap: 0.85rem;
 }
 
 .meta-card,
@@ -75,14 +75,14 @@
 }
 
 .meta-card {
-  padding: 1rem;
+  padding: 0.85rem;
   display: grid;
   gap: 0.35rem;
 }
 
 .meta-label,
 .detail-label {
-  font-size: 0.72rem;
+  font-size: 0.66rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--color-text-muted);
@@ -97,7 +97,7 @@
 }
 
 .profile-card {
-  padding: 1.25rem;
+  padding: 1rem;
 }
 
 .section-header {
@@ -105,26 +105,26 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 1rem;
+  margin-bottom: 0.85rem;
 }
 
 .section-header h2 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 0.94rem;
 }
 
 .section-count {
-  padding: 0.25rem 0.55rem;
+  padding: 0.22rem 0.5rem;
   border-radius: var(--radius-full);
   background: var(--color-background);
   color: var(--color-text-muted);
-  font-size: 0.75rem;
+  font-size: 0.68rem;
   font-weight: 700;
 }
 
 .detail-list {
   display: grid;
-  gap: 0.9rem;
+  gap: 0.75rem;
 }
 
 .detail-row {
@@ -132,7 +132,7 @@
   justify-content: space-between;
   gap: 1rem;
   border-bottom: 1px solid var(--color-border);
-  padding-bottom: 0.8rem;
+  padding-bottom: 0.7rem;
 }
 
 .detail-row:last-child {
@@ -151,21 +151,21 @@
 }
 
 .skill-pill {
-  padding: 0.4rem 0.75rem;
+  padding: 0.32rem 0.62rem;
   border-radius: var(--radius-full);
   background: rgba(37, 99, 235, 0.08);
   color: var(--color-primary-hover);
-  font-size: 0.85rem;
+  font-size: 0.76rem;
   font-weight: 600;
 }
 
 .stack-list {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.65rem;
 }
 
 .stack-card {
-  padding: 1rem;
+  padding: 0.85rem;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
   background: var(--color-background);
@@ -174,7 +174,7 @@
 .stack-title {
   font-weight: 700;
   color: var(--color-text);
-  margin-bottom: 0.2rem;
+  margin-bottom: 0.15rem;
 }
 
 .stack-subtitle {
@@ -192,7 +192,7 @@
 .stack-description {
   margin: 0;
   color: var(--color-text);
-  font-size: 0.9rem;
+  font-size: 0.82rem;
 }
 
 .empty-copy {
@@ -202,23 +202,23 @@
 
 .profile-json {
   margin: 0;
-  max-height: 560px;
+  max-height: 500px;
   overflow: auto;
 }
 
 .profile-actions {
-  margin-top: 1rem;
+  margin-top: 0.85rem;
   display: flex;
   gap: 0.75rem;
 }
 
 .loading-state,
 .error-state {
-  padding: 2rem;
+  padding: 1.5rem;
 }
 
 .loading-state {
-  min-height: 220px;
+  min-height: 180px;
   display: flex;
   align-items: center;
   justify-content: center;
