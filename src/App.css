@@ -4,3 +4,106 @@
   margin: 0;
   padding: 0;
 }
+
+button {
+  font: inherit;
+  color: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+button.primary-button,
+button.secondary-button,
+button.text-button,
+button.icon-button,
+button.browse-btn,
+button.quick-action {
+  border: none;
+  transition: transform var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), opacity var(--transition-fast);
+}
+
+button.primary-button,
+button.secondary-button,
+button.browse-btn,
+button.quick-action {
+  min-height: 42px;
+  border-radius: 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 0.72rem 1rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  cursor: pointer;
+  text-decoration: none;
+  user-select: none;
+}
+
+button.primary-button {
+  background: linear-gradient(135deg, var(--color-primary), #4f46e5);
+  color: #fff;
+  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.22);
+}
+
+button.primary-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.28);
+}
+
+button.secondary-button,
+button.browse-btn,
+button.quick-action {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+
+button.secondary-button:hover:not(:disabled),
+button.browse-btn:hover:not(:disabled),
+button.quick-action:hover:not(:disabled) {
+  background: var(--color-background);
+  border-color: color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
+  transform: translateY(-1px);
+}
+
+button.text-button {
+  background: transparent;
+  color: var(--color-primary);
+  padding: 0.25rem 0.35rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button.text-button:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+button.icon-button {
+  background: transparent;
+  color: var(--color-text-muted);
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+button.icon-button:hover:not(:disabled) {
+  background: var(--color-background);
+  color: var(--color-text);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}

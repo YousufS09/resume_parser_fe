@@ -108,6 +108,7 @@ const UploadResume = () => {
   const readyCount = files.filter((item) => item.status === 'ready').length;
   const parsingCount = files.filter((item) => item.status === 'parsing').length;
   const parsedCount = files.filter((item) => item.status === 'parsed').length;
+  const hasSelectableFiles = files.some((item) => item.status === 'ready');
 
   const renderStatus = (status) => {
     switch (status) {
@@ -174,9 +175,9 @@ const UploadResume = () => {
           <button
             className="primary-button"
             onClick={() => processBatch()}
-            disabled={isProcessing || readyCount === 0}
+            disabled={isProcessing || !hasSelectableFiles}
           >
-            Upload & Parse
+            {isProcessing ? 'Uploading and parsing...' : 'Upload & Parse'}
           </button>
           <button
             className="text-button"
