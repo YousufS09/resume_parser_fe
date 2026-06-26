@@ -61,61 +61,27 @@ const UploadResume = () => {
     setFiles((prev) => prev.filter((item) => item.status === 'ready' || item.status === 'uploading' || item.status === 'parsing'));
   };
 
-  const processFile = async (item, action) => {
-    if (action === 'parse-uploaded' && !item.uploadedResume?.id) {
-      throw new Error('Upload the resume first before parsing it.');
-    }
-
+  const processFile = async (item) => {
     updateFile(item.clientId, {
-      status: action === 'upload' ? 'uploading' : 'parsing',
+      status: 'parsing',
       error: null,
     });
 
-    let response;
-
-    if (action === 'upload') {
-      response = await resumeApi.uploadResume(item.file);
-      updateFile(item.clientId, {
-        status: 'uploaded',
-        uploadedResume: response.data,
-      });
-      return response.data;
-    }
-
-    if (action === 'parse') {
-      response = await resumeApi.parseResume(item.file);
-      updateFile(item.clientId, {
-        status: 'parsed',
-        parsedResume: response.resume,
-        parsedData: response.data,
-      });
-      return response.resume || response.data;
-    }
-
-    response = await resumeApi.parseUploadedResume(item.uploadedResume.id);
+    const response = await resumeApi.parseResume(item.file);
     updateFile(item.clientId, {
       status: 'parsed',
-      parsedResume: response.data,
-      parsedData: response.data?.data || null,
+      uploadedResume: response.resume || null,
+      parsedResume: response.resume || null,
+      parsedData: response.data || null,
     });
-    return response.data;
+    return response.resume || response.data;
   };
 
-  const processBatch = async (action) => {
-    const targetItems = files.filter((item) => {
-      if (action === 'upload') {
-        return item.status === 'ready';
-      }
-
-      if (action === 'parse') {
-        return item.status === 'ready';
-      }
-
-      return item.status === 'uploaded' && item.uploadedResume?.id;
-    });
+  const processBatch = async () => {
+    const targetItems = files.filter((item) => item.status === 'ready');
 
     if (targetItems.length === 0) {
-      setNotice({ type: 'warning', text: 'No matching files are available for that action.' });
+      setNotice({ type: 'warning', text: 'No ready files are available to upload and parse.' });
       return;
     }
 
@@ -124,16 +90,13 @@ const UploadResume = () => {
 
     try {
       for (const item of targetItems) {
-        const result = await processFile(item, action);
+        const result = await processFile(item);
         setRecentResult(result);
       }
 
-      const actionLabel =
-        action === 'upload' ? 'uploaded' : action === 'parse' ? 'parsed and saved' : 'parsed from the uploaded record';
-
       setNotice({
         type: 'success',
-        text: `${targetItems.length} resume${targetItems.length === 1 ? '' : 's'} ${actionLabel} successfully.`,
+        text: `${targetItems.length} resume${targetItems.length === 1 ? '' : 's'} uploaded and parsed successfully.`,
       });
     } catch (error) {
       setNotice({ type: 'error', text: extractErrorMessage(error) });
@@ -143,7 +106,7 @@ const UploadResume = () => {
   };
 
   const readyCount = files.filter((item) => item.status === 'ready').length;
-  const uploadedCount = files.filter((item) => item.status === 'uploaded').length;
+  const parsingCount = files.filter((item) => item.status === 'parsing').length;
   const parsedCount = files.filter((item) => item.status === 'parsed').length;
 
   const renderStatus = (status) => {
@@ -171,12 +134,12 @@ const UploadResume = () => {
         <div>
           <h1 className="page-title">Upload Resumes</h1>
           <p className="page-subtitle">
-            Upload first, parse later, or do both in one request. The page talks directly to the parser service.
+            Upload and parse in one step. The page talks directly to the parser service.
           </p>
         </div>
         <div className="upload-stats">
           <span className="stat-chip">Ready: {readyCount}</span>
-          <span className="stat-chip">Uploaded: {uploadedCount}</span>
+          <span className="stat-chip">Parsing: {parsingCount}</span>
           <span className="stat-chip">Parsed: {parsedCount}</span>
         </div>
       </div>
@@ -209,18 +172,11 @@ const UploadResume = () => {
 
         <div className="upload-toolbar">
           <button
-            className="secondary-button"
-            onClick={() => processBatch('upload')}
-            disabled={isProcessing || readyCount === 0}
-          >
-            Upload Selected
-          </button>
-          <button
             className="primary-button"
-            onClick={() => processBatch('parse')}
+            onClick={() => processBatch()}
             disabled={isProcessing || readyCount === 0}
           >
-            Parse & Save
+            Upload & Parse Selected
           </button>
           <button
             className="text-button"
@@ -265,40 +221,15 @@ const UploadResume = () => {
                   </div>
                   <div className="file-actions">
                     {item.status === 'ready' && (
-                      <>
-                        <button
-                          className="secondary-button small-button"
-                          onClick={() => processFile(item, 'upload').catch((error) => {
-                            updateFile(item.clientId, { status: 'error', error: extractErrorMessage(error) });
-                            setNotice({ type: 'error', text: extractErrorMessage(error) });
-                          })}
-                          disabled={isProcessing}
-                        >
-                          Upload
-                        </button>
-                        <button
-                          className="primary-button small-button"
-                          onClick={() => processFile(item, 'parse').catch((error) => {
-                            updateFile(item.clientId, { status: 'error', error: extractErrorMessage(error) });
-                            setNotice({ type: 'error', text: extractErrorMessage(error) });
-                          })}
-                          disabled={isProcessing}
-                        >
-                          Parse
-                        </button>
-                      </>
-                    )}
-
-                    {item.status === 'uploaded' && item.uploadedResume?.id && (
                       <button
                         className="primary-button small-button"
-                        onClick={() => processFile(item, 'parse-uploaded').catch((error) => {
+                        onClick={() => processFile(item).catch((error) => {
                           updateFile(item.clientId, { status: 'error', error: extractErrorMessage(error) });
                           setNotice({ type: 'error', text: extractErrorMessage(error) });
                         })}
                         disabled={isProcessing}
                       >
-                        Parse Uploaded
+                        Upload & Parse
                       </button>
                     )}
 
@@ -313,7 +244,7 @@ const UploadResume = () => {
           </div>
           <div className="card-footer upload-footer">
             <div className="footer-note">
-              {isProcessing ? 'Processing resumes against the parser service...' : 'Choose upload only or parse immediately depending on your workflow.'}
+              {isProcessing ? 'Processing resumes against the parser service...' : 'Each click sends the file once for upload and parsing together.'}
             </div>
             <button className="text-button" onClick={() => setRecentResult(null)} disabled={!recentResult}>
               Clear latest response
