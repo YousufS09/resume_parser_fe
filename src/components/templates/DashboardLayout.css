@@ -4,6 +4,12 @@
   width: 100vw;
   overflow: hidden;
   background-color: var(--color-background);
+  --sidebar-width: 260px;
+  --sidebar-collapsed-width: 84px;
+}
+
+.dashboard-layout.sidebar-collapsed {
+  --sidebar-width: 84px;
 }
 
 .dashboard-main {
@@ -18,4 +24,5 @@
   padding: 2rem;
   overflow-y: auto;
   background: var(--color-background);
+  min-width: 0;
 }
