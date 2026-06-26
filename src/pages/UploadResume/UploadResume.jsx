@@ -176,7 +176,7 @@ const UploadResume = () => {
             onClick={() => processBatch()}
             disabled={isProcessing || readyCount === 0}
           >
-            Upload & Parse Selected
+            Upload & Parse
           </button>
           <button
             className="text-button"
