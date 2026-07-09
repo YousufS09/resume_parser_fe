@@ -63,18 +63,36 @@ const UploadResume = () => {
 
   const processFile = async (item) => {
     updateFile(item.clientId, {
-      status: 'parsing',
+      status: 'uploading',
       error: null,
     });
 
-    const response = await resumeApi.parseResume(item.file);
+    const uploadedResponse = await resumeApi.uploadResume(item.file);
+    const uploadedResume = uploadedResponse.data || uploadedResponse.resume || null;
+
+    updateFile(item.clientId, {
+      status: 'uploaded',
+      uploadedResume,
+    });
+
+    updateFile(item.clientId, {
+      status: 'parsing',
+    });
+
+    const response = uploadedResume?.id
+      ? await resumeApi.parseUploadedResume(uploadedResume.id)
+      : await resumeApi.parseResume(item.file);
+
+    const parsedResume = response.resume || response.data || null;
+    const parsedData = response.data || response.resume?.data || null;
+
     updateFile(item.clientId, {
       status: 'parsed',
-      uploadedResume: response.resume || null,
-      parsedResume: response.resume || null,
-      parsedData: response.data || null,
+      uploadedResume: uploadedResume || parsedResume,
+      parsedResume,
+      parsedData,
     });
-    return response.resume || response.data;
+    return parsedResume || parsedData;
   };
 
   const processBatch = async () => {

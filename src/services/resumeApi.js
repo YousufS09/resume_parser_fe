@@ -2,16 +2,58 @@ import axios from 'axios';
 
 const trimTrailingSlash = (value) => value.replace(/\/+$/, '');
 
+const normalizeApiBaseUrl = (value) => {
+  const trimmedBase = trimTrailingSlash(value);
+
+  if (!trimmedBase) {
+    return '';
+  }
+
+  try {
+    const parsedUrl = new URL(trimmedBase);
+    const pathname = parsedUrl.pathname.replace(/\/+$/, '');
+
+    if (pathname === '' || pathname === '/') {
+      return `${parsedUrl.origin}/api/parse`;
+    }
+
+    if (pathname === '/api') {
+      return `${parsedUrl.origin}/api/parse`;
+    }
+
+    if (pathname === '/api/parse') {
+      return `${parsedUrl.origin}/api/parse`;
+    }
+
+    return trimmedBase;
+  } catch (error) {
+    if (trimmedBase === '/api') {
+      return '/api/parse';
+    }
+
+    if (trimmedBase === '/api/parse') {
+      return '/api/parse';
+    }
+
+    return trimmedBase;
+  }
+};
+
 const getApiBaseUrl = () => {
   const configuredBase = import.meta.env.VITE_RESUME_API_BASE_URL;
   const defaultBase = 'http://localhost:3000/api/parse';
 
-  return trimTrailingSlash(configuredBase || defaultBase);
+  return normalizeApiBaseUrl(configuredBase || defaultBase);
+};
+
+const getApiTimeoutMs = () => {
+  const configuredTimeout = Number(import.meta.env.VITE_RESUME_API_TIMEOUT_MS);
+  return Number.isFinite(configuredTimeout) && configuredTimeout > 0 ? configuredTimeout : 120000;
 };
 
 const apiClient = axios.create({
   baseURL: getApiBaseUrl(),
-  timeout: 30000,
+  timeout: getApiTimeoutMs(),
 });
 
 const extractErrorMessage = (error) => {
