@@ -1,25 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { extractErrorMessage, resumeApi } from '../../services/resumeApi';
+import { formatDateTime, getCandidateName, sortByMostRecent } from '../../utils/resumeFormat';
 import './ParsedResults.css';
 
-const formatDateTime = (value) => {
-  if (!value) {
-    return 'Not available';
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return 'Not available';
-  }
-
-  return new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(date);
-};
-
-const getCandidateName = (resume) => resume?.data?.personalInfo?.name || resume?.originalName || 'Unnamed resume';
+const PAGE_SIZE = 20;
 
 const getExperienceSummary = (resume) => {
   const experience = resume?.data?.experience;
@@ -32,7 +17,13 @@ const getExperienceSummary = (resume) => {
 
 const ParsedResults = () => {
   const navigate = useNavigate();
-  const [searchTerm, setSearchTerm] = useState('');
+  // The search term lives in the URL (?q=) so the header search box can link here
+  const [searchParams, setSearchParams] = useSearchParams();
+  const searchTerm = searchParams.get('q') || '';
+  const setSearchTerm = (value) => {
+    setSearchParams(value ? { q: value } : {}, { replace: true });
+  };
+  const [page, setPage] = useState(0);
   const [resumes, setResumes] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -49,13 +40,7 @@ const ParsedResults = () => {
 
     try {
       const response = await resumeApi.getParsedResumes();
-      const sortedResumes = [...(response.data || [])].sort((a, b) => {
-        const left = new Date(b.parsedAt || b.uploadedAt || 0).getTime();
-        const right = new Date(a.parsedAt || a.uploadedAt || 0).getTime();
-        return left - right;
-      });
-
-      setResumes(sortedResumes);
+      setResumes(sortByMostRecent(response.data || []));
     } catch (requestError) {
       setError(extractErrorMessage(requestError));
     } finally {
@@ -84,6 +69,15 @@ const ParsedResults = () => {
     });
   }, [resumes, searchTerm]);
 
+  // Back to the first page whenever the search changes
+  useEffect(() => {
+    setPage(0);
+  }, [searchTerm]);
+
+  const pageCount = Math.max(1, Math.ceil(filteredResumes.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount - 1);
+  const pagedResumes = filteredResumes.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+
   const totalSkills = resumes.reduce((count, resume) => {
     const skills = Array.isArray(resume.data?.skills) ? resume.data.skills.length : 0;
     return count + skills;
@@ -110,7 +104,7 @@ const ParsedResults = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <button className="secondary-button icon-only" onClick={() => loadResumes(true)} disabled={isRefreshing}>
+          <button className="secondary-button icon-only" onClick={() => loadResumes(true)} disabled={isRefreshing} aria-label="Refresh results" title="Refresh results">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8 8 0 004.582 9m0 0H9m11 11v-5h-.581m0 0A8 8 0 0119.418 15m0 0H15" />
             </svg>
@@ -140,7 +134,7 @@ const ParsedResults = () => {
               </tr>
             </thead>
             <tbody>
-              {!isLoading && filteredResumes.map((resume) => (
+              {!isLoading && pagedResumes.map((resume) => (
                 <tr key={resume.id}>
                   <td>
                     <div className="candidate-name-cell">
@@ -186,13 +180,19 @@ const ParsedResults = () => {
 
         <div className="card-footer pagination">
           <span className="text-muted">
-            {isRefreshing ? 'Refreshing from service...' : `Showing ${filteredResumes.length} of ${resumes.length} parsed resumes`}
+            {isRefreshing
+              ? 'Refreshing from service...'
+              : filteredResumes.length === 0
+                ? `Showing 0 of ${resumes.length} parsed resumes`
+                : `Showing ${currentPage * PAGE_SIZE + 1}-${currentPage * PAGE_SIZE + pagedResumes.length} of ${filteredResumes.length} matching (${resumes.length} total)`}
           </span>
           <div className="pagination-controls">
-            <button className="icon-button" onClick={() => loadResumes(true)} disabled={isRefreshing}>
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8 8 0 004.582 9m0 0H9m11 11v-5h-.581m0 0A8 8 0 0119.418 15m0 0H15" />
-              </svg>
+            <button className="text-button" onClick={() => setPage(currentPage - 1)} disabled={currentPage === 0}>
+              Previous
+            </button>
+            <span className="text-muted">Page {currentPage + 1} of {pageCount}</span>
+            <button className="text-button" onClick={() => setPage(currentPage + 1)} disabled={currentPage >= pageCount - 1}>
+              Next
             </button>
           </div>
         </div>

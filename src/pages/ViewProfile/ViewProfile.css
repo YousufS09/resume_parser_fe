@@ -212,6 +212,13 @@
   gap: 0.75rem;
 }
 
+.profile-hero-top .profile-actions {
+  margin-top: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+}
+
 .loading-state,
 .error-state {
   padding: 1.5rem;

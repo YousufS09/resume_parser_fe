@@ -6,7 +6,6 @@ import UploadResume from './pages/UploadResume';
 import ParsedResults from './pages/ParsedResults';
 import ViewProfile from './pages/ViewProfile';
 import './App.css';
-import './pages/Dashboard/Dashboard.css';
 
 function App() {
   return (

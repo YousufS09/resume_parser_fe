@@ -1,33 +1,15 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { extractErrorMessage, resumeApi } from '../../services/resumeApi';
+import {
+  formatDateTime,
+  formatPercent,
+  getCandidateName,
+  getConfidence,
+  getInitials,
+  sortByMostRecent,
+} from '../../utils/resumeFormat';
 import './Dashboard.css';
-
-const formatDateTime = (value) => {
-  if (!value) {
-    return 'Not available';
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return 'Not available';
-  }
-
-  return new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(date);
-};
-
-const getCandidateName = (resume) => resume?.data?.personalInfo?.name || resume?.originalName || 'Unnamed resume';
-
-const getInitials = (name) =>
-  (name || 'U')
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join('');
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -35,29 +17,23 @@ const Dashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    const loadDashboardData = async () => {
-      setIsLoading(true);
-      setError(null);
+  const loadDashboardData = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
 
-      try {
-        const response = await resumeApi.getParsedResumes();
-        const sorted = [...(response.data || [])].sort((left, right) => {
-          const leftTime = new Date(right.parsedAt || right.uploadedAt || 0).getTime();
-          const rightTime = new Date(left.parsedAt || left.uploadedAt || 0).getTime();
-          return leftTime - rightTime;
-        });
-
-        setResumes(sorted);
-      } catch (requestError) {
-        setError(extractErrorMessage(requestError));
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadDashboardData();
+    try {
+      const response = await resumeApi.getParsedResumes();
+      setResumes(sortByMostRecent(response.data || []));
+    } catch (requestError) {
+      setError(extractErrorMessage(requestError));
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
 
   const dashboardStats = useMemo(() => {
     const totalResumes = resumes.length;
@@ -66,13 +42,12 @@ const Dashboard = () => {
       return count + skills;
     }, 0);
     const candidatesWithEmail = resumes.filter((resume) => Boolean(resume.data?.personalInfo?.email)).length;
-    const confidenceValues = resumes
-      .map((resume) => Number(resume.data?.confidenceScore ?? 0))
-      .filter((value) => Number.isFinite(value));
+    // Resumes without a score are left out of the average instead of counting as 0%
+    const confidenceValues = resumes.map(getConfidence).filter((value) => value !== null);
     const averageConfidence = confidenceValues.length
       ? confidenceValues.reduce((sum, value) => sum + value, 0) / confidenceValues.length
-      : 0;
-    const highConfidence = resumes.filter((resume) => Number(resume.data?.confidenceScore ?? 0) >= 0.85).length;
+      : null;
+    const highConfidence = confidenceValues.filter((value) => value >= 0.85).length;
 
     return {
       totalResumes,
@@ -108,24 +83,24 @@ const Dashboard = () => {
   const recentResumes = useMemo(() => resumes.slice(0, 5), [resumes]);
 
   const confidenceBuckets = useMemo(() => {
+    // Ordered from highest threshold down, so every score falls into exactly one band
     const buckets = [
-      { label: '0.90 - 1.00', min: 0.9, max: 1, count: 0 },
-      { label: '0.75 - 0.89', min: 0.75, max: 0.89, count: 0 },
-      { label: 'Below 0.75', min: 0, max: 0.749, count: 0 },
+      { label: '90% and above', min: 0.9, count: 0 },
+      { label: '75% to 89%', min: 0.75, count: 0 },
+      { label: 'Below 75%', min: -Infinity, count: 0 },
+      { label: 'No score', min: null, count: 0 },
     ];
 
     for (const resume of resumes) {
-      const score = Number(resume.data?.confidenceScore ?? 0);
-      const bucket = buckets.find((entry) => score >= entry.min && score <= entry.max);
-      if (bucket) {
-        bucket.count += 1;
-      }
+      const score = getConfidence(resume);
+      const bucket = score === null
+        ? buckets[buckets.length - 1]
+        : buckets.find((entry) => entry.min !== null && score >= entry.min);
+      bucket.count += 1;
     }
 
-    return buckets;
+    return buckets.filter((bucket) => bucket.min !== null || bucket.count > 0);
   }, [resumes]);
-
-  const formatPercent = (value) => `${Math.round(value * 100)}%`;
 
   return (
     <div className="dashboard-page">
@@ -154,7 +129,7 @@ const Dashboard = () => {
           </div>
           <div className="hero-panel-card">
             <span className="panel-label">Average confidence</span>
-            <strong>{dashboardStats.totalResumes ? formatPercent(dashboardStats.averageConfidence) : '0%'}</strong>
+            <strong>{formatPercent(dashboardStats.averageConfidence)}</strong>
             <span>{dashboardStats.highConfidence} high-confidence parses</span>
           </div>
           <div className="hero-panel-card">
@@ -187,8 +162,8 @@ const Dashboard = () => {
           </div>
           <div className="stat-content">
             <h3>Average confidence</h3>
-            <div className="stat-value">{dashboardStats.totalResumes ? formatPercent(dashboardStats.averageConfidence) : '0%'}</div>
-            <div className="stat-trend positive">Quality across parsed output</div>
+            <div className="stat-value">{formatPercent(dashboardStats.averageConfidence)}</div>
+            <div className="stat-trend positive">Profile completeness across parsed output</div>
           </div>
         </article>
 
@@ -236,7 +211,7 @@ const Dashboard = () => {
             ) : error ? (
               <div className="panel-empty error-state">
                 <p>{error}</p>
-                <button className="secondary-button" onClick={() => window.location.reload()}>
+                <button className="secondary-button" onClick={loadDashboardData}>
                   Retry
                 </button>
               </div>
@@ -248,7 +223,7 @@ const Dashboard = () => {
                     <div className="recent-main">
                       <div className="recent-title-row">
                         <h3>{getCandidateName(resume)}</h3>
-                        <span className="detail-badge">{formatPercent(Number(resume.data?.confidenceScore ?? 0))}</span>
+                        <span className="detail-badge">{formatPercent(getConfidence(resume))}</span>
                       </div>
                       <div className="recent-meta">
                         <span>{resume.data?.personalInfo?.email || 'Email not extracted'}</span>
@@ -348,9 +323,14 @@ const Dashboard = () => {
             <button className="secondary-button quick-action" onClick={() => navigate('/results')}>
               Review parsed results
             </button>
-            <button className="secondary-button quick-action" onClick={() => navigate('/results')}>
-              Open candidate profiles
-            </button>
+            {dashboardStats.latestCandidate && (
+              <button
+                className="secondary-button quick-action"
+                onClick={() => navigate(`/results/${dashboardStats.latestCandidate.id}`)}
+              >
+                Open latest candidate profile
+              </button>
+            )}
           </div>
         </div>
       </section>

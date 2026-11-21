@@ -1,33 +1,29 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { extractErrorMessage, resumeApi } from '../../services/resumeApi';
+import {
+  formatDateTime,
+  formatPercent,
+  getCandidateName,
+  getConfidence,
+  getInitials,
+  toSafeUrl,
+} from '../../utils/resumeFormat';
 import './ViewProfile.css';
 
-const formatDateTime = (value) => {
-  if (!value) {
-    return 'Not available';
+const ExternalLink = ({ value }) => {
+  const url = toSafeUrl(value);
+
+  if (!url) {
+    return fieldValue(value);
   }
 
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return 'Not available';
-  }
-
-  return new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(date);
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer">
+      {value}
+    </a>
+  );
 };
-
-const getCandidateName = (resume) => resume?.data?.personalInfo?.name || resume?.originalName || 'Unnamed resume';
-
-const getInitials = (name) =>
-  (name || 'U')
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join('');
 
 const fieldValue = (value) => {
   if (Array.isArray(value)) {
@@ -47,6 +43,40 @@ const ViewProfile = () => {
   const [resume, setResume] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [pendingAction, setPendingAction] = useState(null);
+  const [actionNotice, setActionNotice] = useState(null);
+
+  const handleReparse = async () => {
+    setPendingAction('reparse');
+    setActionNotice(null);
+
+    try {
+      const response = await resumeApi.reparseResume(id);
+      setResume(response.data);
+      setActionNotice({ type: 'success', text: 'Resume parsed again and the profile was updated.' });
+    } catch (requestError) {
+      setActionNotice({ type: 'error', text: extractErrorMessage(requestError) });
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm('Delete this resume and its parsed data? This cannot be undone.')) {
+      return;
+    }
+
+    setPendingAction('delete');
+    setActionNotice(null);
+
+    try {
+      await resumeApi.deleteResume(id);
+      navigate('/results', { replace: true });
+    } catch (requestError) {
+      setActionNotice({ type: 'error', text: extractErrorMessage(requestError) });
+      setPendingAction(null);
+    }
+  };
 
   useEffect(() => {
     const loadResume = async () => {
@@ -142,8 +172,21 @@ const ViewProfile = () => {
             <button className="secondary-button back-button" onClick={() => navigate('/results')}>
               Back
             </button>
-            <span className="profile-id-badge">Resume ID {resume.id}</span>
+            <div className="profile-actions">
+              <a className="secondary-button" href={resumeApi.getResumeFileUrl(resume.id)} download>
+                Download original
+              </a>
+              <button className="secondary-button" onClick={handleReparse} disabled={pendingAction !== null}>
+                {pendingAction === 'reparse' ? 'Parsing...' : 'Re-parse'}
+              </button>
+              <button className="secondary-button danger-button" onClick={handleDelete} disabled={pendingAction !== null}>
+                {pendingAction === 'delete' ? 'Deleting...' : 'Delete'}
+              </button>
+              <span className="profile-id-badge">Resume ID {resume.id}</span>
+            </div>
           </div>
+
+          {actionNotice && <div className={`notice notice-${actionNotice.type}`}>{actionNotice.text}</div>}
 
           <div className="profile-header">
             <div className="profile-avatar">{getInitials(candidateName)}</div>
@@ -172,6 +215,10 @@ const ViewProfile = () => {
               <span className="meta-label">Parsed At</span>
               <span className="meta-value">{formatDateTime(resume.parsedAt || resume.uploadedAt)}</span>
             </div>
+            <div className="meta-card">
+              <span className="meta-label">Confidence</span>
+              <span className="meta-value">{formatPercent(getConfidence(resume))}</span>
+            </div>
           </div>
         </div>
 
@@ -183,15 +230,15 @@ const ViewProfile = () => {
             <div className="detail-list">
               <div className="detail-row">
                 <span className="detail-label">LinkedIn</span>
-                <span className="detail-value break">{fieldValue(resume.data?.personalInfo?.linkedin)}</span>
+                <span className="detail-value break"><ExternalLink value={resume.data?.personalInfo?.linkedin} /></span>
               </div>
               <div className="detail-row">
                 <span className="detail-label">GitHub</span>
-                <span className="detail-value break">{fieldValue(resume.data?.personalInfo?.github)}</span>
+                <span className="detail-value break"><ExternalLink value={resume.data?.personalInfo?.github} /></span>
               </div>
               <div className="detail-row">
                 <span className="detail-label">Portfolio</span>
-                <span className="detail-value break">{fieldValue(resume.data?.personalInfo?.portfolio)}</span>
+                <span className="detail-value break"><ExternalLink value={resume.data?.personalInfo?.portfolio} /></span>
               </div>
               <div className="detail-row">
                 <span className="detail-label">Source File</span>
@@ -231,7 +278,7 @@ const ViewProfile = () => {
                   <div className="stack-title">{experience.job_title || experience.role || 'Role not provided'}</div>
                   <div className="stack-subtitle">{experience.company_name || experience.company || 'Company not provided'}</div>
                   <div className="stack-meta">
-                    {fieldValue(experience.start_date || experience.years || experience.startYear)}
+                    {[experience.employment_type, fieldValue(experience.start_date)].filter(Boolean).join(' | ')}
                     {experience.end_date || experience.currently_working
                       ? ` - ${experience.currently_working ? 'Present' : fieldValue(experience.end_date)}`
                       : ''}
@@ -309,7 +356,15 @@ const ViewProfile = () => {
                   <div className="stack-subtitle">{fieldValue(project.technologies_used)}</div>
                   {project.project_description && <p className="stack-description">{project.project_description}</p>}
                   <div className="stack-meta">
-                    {project.github_link || project.project_link ? 'Links available' : 'No links extracted'}
+                    {project.github_link || project.project_link ? (
+                      <>
+                        {project.github_link && <ExternalLink value={project.github_link} />}
+                        {project.github_link && project.project_link && ' | '}
+                        {project.project_link && <ExternalLink value={project.project_link} />}
+                      </>
+                    ) : (
+                      'No links extracted'
+                    )}
                   </div>
                 </article>
               ))

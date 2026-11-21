@@ -13,25 +13,13 @@ const normalizeApiBaseUrl = (value) => {
     const parsedUrl = new URL(trimmedBase);
     const pathname = parsedUrl.pathname.replace(/\/+$/, '');
 
-    if (pathname === '' || pathname === '/') {
-      return `${parsedUrl.origin}/api/parse`;
-    }
-
-    if (pathname === '/api') {
-      return `${parsedUrl.origin}/api/parse`;
-    }
-
-    if (pathname === '/api/parse') {
+    if (pathname === '' || pathname === '/' || pathname === '/api' || pathname === '/api/parse') {
       return `${parsedUrl.origin}/api/parse`;
     }
 
     return trimmedBase;
-  } catch (error) {
-    if (trimmedBase === '/api') {
-      return '/api/parse';
-    }
-
-    if (trimmedBase === '/api/parse') {
+  } catch {
+    if (trimmedBase === '/api' || trimmedBase === '/api/parse') {
       return '/api/parse';
     }
 
@@ -51,8 +39,10 @@ const getApiTimeoutMs = () => {
   return Number.isFinite(configuredTimeout) && configuredTimeout > 0 ? configuredTimeout : 120000;
 };
 
+const apiBaseUrl = getApiBaseUrl();
+
 const apiClient = axios.create({
-  baseURL: getApiBaseUrl(),
+  baseURL: apiBaseUrl,
   timeout: getApiTimeoutMs(),
 });
 
@@ -81,22 +71,12 @@ const withFormData = (file) => {
 
 export const resumeApi = {
   async uploadResume(file) {
-    const response = await apiClient.post('/upload', withFormData(file), {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-
+    const response = await apiClient.post('/upload', withFormData(file));
     return response.data;
   },
 
   async parseResume(file) {
-    const response = await apiClient.post('/resume', withFormData(file), {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-
+    const response = await apiClient.post('/resume', withFormData(file));
     return response.data;
   },
 
@@ -105,14 +85,29 @@ export const resumeApi = {
     return response.data;
   },
 
-  async getParsedResumes() {
-    const response = await apiClient.get('/resumes');
+  async reparseResume(resumeId) {
+    const response = await apiClient.post(`/resumes/${resumeId}/reparse`);
+    return response.data;
+  },
+
+  // Without params the full list is returned; pass { limit, offset } to page through it.
+  async getParsedResumes(params = {}) {
+    const response = await apiClient.get('/resumes', { params });
     return response.data;
   },
 
   async getParsedResumeById(resumeId) {
     const response = await apiClient.get(`/resumes/${resumeId}`);
     return response.data;
+  },
+
+  async deleteResume(resumeId) {
+    const response = await apiClient.delete(`/resumes/${resumeId}`);
+    return response.data;
+  },
+
+  getResumeFileUrl(resumeId) {
+    return `${apiBaseUrl}/resumes/${resumeId}/file`;
   },
 };
 

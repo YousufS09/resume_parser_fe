@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { resumeApi, extractErrorMessage } from '../../services/resumeApi';
+import { validateResumeFile } from '../../utils/resumeFormat';
 import './UploadResume.css';
 
 const UploadResume = () => {
@@ -10,18 +12,32 @@ const UploadResume = () => {
   const [recentResult, setRecentResult] = useState(null);
 
   const addFiles = (incomingFiles) => {
-    const normalized = incomingFiles.map((file) => ({
-      clientId: `${Date.now()}-${Math.round(Math.random() * 1e9)}`,
-      file,
-      status: 'ready',
-      uploadedResume: null,
-      parsedResume: null,
-      parsedData: null,
-      error: null,
-    }));
+    const normalized = incomingFiles.map((file) => {
+      // Files the backend would reject are flagged immediately instead of failing after upload
+      const validationError = validateResumeFile(file);
+
+      return {
+        clientId: `${Date.now()}-${Math.round(Math.random() * 1e9)}`,
+        file,
+        status: validationError ? 'error' : 'ready',
+        uploadedResume: null,
+        parsedResume: null,
+        parsedData: null,
+        error: validationError,
+      };
+    });
+
+    const rejectedCount = normalized.filter((item) => item.status === 'error').length;
 
     setFiles((prev) => [...prev, ...normalized]);
-    setNotice({ type: 'info', text: `${normalized.length} file${normalized.length === 1 ? '' : 's'} added.` });
+    setNotice(
+      rejectedCount > 0
+        ? {
+            type: 'warning',
+            text: `${normalized.length - rejectedCount} file(s) added. ${rejectedCount} file(s) cannot be uploaded; see the list below.`,
+          }
+        : { type: 'info', text: `${normalized.length} file${normalized.length === 1 ? '' : 's'} added.` }
+    );
   };
 
   const handleDragOver = (e) => {
@@ -61,38 +77,44 @@ const UploadResume = () => {
     setFiles((prev) => prev.filter((item) => item.status === 'ready' || item.status === 'uploading' || item.status === 'parsing'));
   };
 
+  // Uploads then parses one file. Errors are recorded on the item so the rest of the batch continues.
   const processFile = async (item) => {
     updateFile(item.clientId, {
       status: 'uploading',
       error: null,
     });
 
-    const uploadedResponse = await resumeApi.uploadResume(item.file);
-    const uploadedResume = uploadedResponse.data || uploadedResponse.resume || null;
+    let uploadedResume = item.uploadedResume;
 
-    updateFile(item.clientId, {
-      status: 'uploaded',
-      uploadedResume,
-    });
+    try {
+      // A retry after a failed parse reuses the already uploaded file
+      if (!uploadedResume?.id) {
+        const uploadedResponse = await resumeApi.uploadResume(item.file);
+        uploadedResume = uploadedResponse.data || null;
+        updateFile(item.clientId, { uploadedResume });
+      }
 
-    updateFile(item.clientId, {
-      status: 'parsing',
-    });
+      updateFile(item.clientId, { status: 'parsing' });
 
-    const response = uploadedResume?.id
-      ? await resumeApi.parseUploadedResume(uploadedResume.id)
-      : await resumeApi.parseResume(item.file);
+      const response = await resumeApi.parseUploadedResume(uploadedResume.id);
+      const parsedResume = response.data || null;
 
-    const parsedResume = response.resume || response.data || null;
-    const parsedData = response.data || response.resume?.data || null;
+      updateFile(item.clientId, {
+        status: 'parsed',
+        parsedResume,
+        parsedData: parsedResume?.data || null,
+      });
 
-    updateFile(item.clientId, {
-      status: 'parsed',
-      uploadedResume: uploadedResume || parsedResume,
-      parsedResume,
-      parsedData,
-    });
-    return parsedResume || parsedData;
+      return parsedResume;
+    } catch (error) {
+      updateFile(item.clientId, {
+        status: 'error',
+        uploadedResume,
+        error: extractErrorMessage(error),
+      });
+
+      return null;
+    }
   };
 
   const processBatch = async () => {
@@ -106,21 +128,35 @@ const UploadResume = () => {
     setIsProcessing(true);
     setNotice(null);
 
-    try {
-      for (const item of targetItems) {
-        const result = await processFile(item);
+    let succeeded = 0;
+
+    for (const item of targetItems) {
+      const result = await processFile(item);
+      if (result) {
+        succeeded += 1;
         setRecentResult(result);
       }
-
-      setNotice({
-        type: 'success',
-        text: `${targetItems.length} resume${targetItems.length === 1 ? '' : 's'} uploaded and parsed successfully.`,
-      });
-    } catch (error) {
-      setNotice({ type: 'error', text: extractErrorMessage(error) });
-    } finally {
-      setIsProcessing(false);
     }
+
+    const failed = targetItems.length - succeeded;
+
+    setNotice(
+      failed === 0
+        ? {
+            type: 'success',
+            text: `${succeeded} resume${succeeded === 1 ? '' : 's'} uploaded and parsed successfully.`,
+          }
+        : {
+            type: succeeded > 0 ? 'warning' : 'error',
+            text: `${succeeded} parsed, ${failed} failed. Check the errors below; failed uploads can be retried.`,
+          }
+    );
+
+    setIsProcessing(false);
+  };
+
+  const retryFile = (clientId) => {
+    updateFile(clientId, { status: 'ready', error: null });
   };
 
   const readyCount = files.filter((item) => item.status === 'ready').length;
@@ -153,7 +189,7 @@ const UploadResume = () => {
         <div>
           <h1 className="page-title">Upload Resumes</h1>
           <p className="page-subtitle">
-            Upload and parse in one step. The page talks directly to the parser service.
+            Each file is uploaded to the parser service and then parsed into a candidate profile.
           </p>
         </div>
         <div className="upload-stats">
@@ -174,15 +210,15 @@ const UploadResume = () => {
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
           </div>
           <h3>Select files or drag and drop here</h3>
-          <p>Supported formats: PDF, DOCX, TXT (Max 10MB per file)</p>
-          
-          <input 
-            type="file" 
-            id="file-upload" 
-            multiple 
+          <p>Supported formats: PDF, DOCX (Max 5 MB per file)</p>
+
+          <input
+            type="file"
+            id="file-upload"
+            multiple
             className="file-input-hidden"
             onChange={handleFileSelect}
-            accept=".pdf,.docx,.doc,.txt"
+            accept=".pdf,.docx"
           />
           <label htmlFor="file-upload" className="secondary-button browse-btn">
             Browse Files
@@ -239,7 +275,17 @@ const UploadResume = () => {
                     </div>
                   </div>
                   <div className="file-actions">
-                    <button className="icon-button delete" onClick={() => removeFile(item.clientId)} disabled={isProcessing}>
+                    {item.status === 'parsed' && item.parsedResume?.id && (
+                      <Link className="text-button" to={`/results/${item.parsedResume.id}`}>
+                        View profile
+                      </Link>
+                    )}
+                    {item.status === 'error' && !validateResumeFile(item.file) && (
+                      <button className="text-button" onClick={() => retryFile(item.clientId)} disabled={isProcessing}>
+                        Retry
+                      </button>
+                    )}
+                    <button className="icon-button delete" onClick={() => removeFile(item.clientId)} disabled={isProcessing} aria-label="Remove file">
                       <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a1 1 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                     </button>
                   </div>
@@ -250,7 +296,7 @@ const UploadResume = () => {
           </div>
           <div className="card-footer upload-footer">
             <div className="footer-note">
-              {isProcessing ? 'Processing resumes against the parser service...' : 'Each click sends the file once for upload and parsing together.'}
+              {isProcessing ? 'Processing resumes against the parser service...' : 'Files are processed one at a time: upload first, then parse.'}
             </div>
             <button className="text-button" onClick={() => setRecentResult(null)} disabled={!recentResult}>
               Clear latest response
@@ -268,20 +314,20 @@ const UploadResume = () => {
             <div className="result-grid">
               <div>
                 <div className="result-label">Name</div>
-                <div className="result-value">{recentResult.personalInfo?.name || recentResult.data?.personalInfo?.name || 'Not provided'}</div>
+                <div className="result-value">{recentResult.data?.personalInfo?.name || 'Not provided'}</div>
               </div>
               <div>
                 <div className="result-label">Email</div>
-                <div className="result-value">{recentResult.personalInfo?.email || recentResult.data?.personalInfo?.email || 'Not provided'}</div>
+                <div className="result-value">{recentResult.data?.personalInfo?.email || 'Not provided'}</div>
               </div>
               <div>
                 <div className="result-label">Phone</div>
-                <div className="result-value">{recentResult.personalInfo?.phone || recentResult.data?.personalInfo?.phone || 'Not provided'}</div>
+                <div className="result-value">{recentResult.data?.personalInfo?.phone || 'Not provided'}</div>
               </div>
               <div>
                 <div className="result-label">Skills</div>
                 <div className="result-value">
-                  {(recentResult.skills || recentResult.data?.skills || []).length} extracted
+                  {(recentResult.data?.skills || []).length} extracted
                 </div>
               </div>
             </div>

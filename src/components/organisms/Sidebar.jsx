@@ -35,16 +35,6 @@ const Sidebar = ({ collapsed }) => {
           <span>Parsed Results</span>
         </NavLink>
       </nav>
-
-      <div className="sidebar-footer">
-        <div className="user-profile">
-          <div className="avatar">AD</div>
-          <div className="user-info">
-            <span className="user-name">Admin User</span>
-            <span className="user-role">HR Manager</span>
-          </div>
-        </div>
-      </div>
     </aside>
   );
 };
